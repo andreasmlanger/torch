@@ -130,10 +130,10 @@ def plot_mnist_image_predictions(model: torch.nn.Module, data, only_false=False)
 
 def show_image_predictions(model: torch.nn.Module, image_path: str, size: int, classes: list[str], device: str):
     transform = transforms.Compose([transforms.Resize(size=(size, size), antialias=True)])
-    while True:
-        random_image = random.choice(os.listdir(image_path))
-        random_image_path = os.path.join(image_path, random_image)
-        predict_and_plot_image(model, random_image_path, classes, transform, device)
+    images = os.listdir(image_path)
+    random.shuffle(images)
+    for image in images:
+        predict_and_plot_image(model, os.path.join(image_path, image), classes, transform, device)
 
 
 def predict_and_plot_image(model: torch.nn.Module, image_path: str, classes: list[str], transform, device='cpu'):

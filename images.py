@@ -2,11 +2,12 @@
 CNN, residual neural network (ResNet) and vision transformer (VIT) to classify images
 Cats & Dogs: https://www.kaggle.com/c/dogs-vs-cats
 Rooms: https://towardsdatascience.com/image-classifier-house-room-type-classification-using-monk-library-d633795a42ef
+Brain MRI: https://www.kaggle.com/datasets/masoudnickparvar/brain-tumor-mri-dataset
 Move images into labeled folders in 'training' and 'validation' directories
 
 Tensorboard:
 - conda activate PyCharm
-- cd "G:/My Drive/Coding/AI/torch"
+- cd "E:/models"
 - tensorboard --logdir runs
 - http://localhost:6006
 """
@@ -17,16 +18,19 @@ from torch.utils.data import DataLoader
 from torchvision import models
 from tqdm.auto import tqdm
 import os
+from explainable.lrp import layer_wise_relevance_propagation
 from utils.data import create_dataloaders
 from utils.general import acc_fn, print_loss_and_accuracy, print_model_summary, create_writer
 from utils.plots import show_image_predictions
 
 # dataset = 'cat_dog'  # cat & dog images
-dataset = 'rooms'  # images of rooms (bedroom, kitchen, living room, etc.)
+# dataset = 'rooms'  # images of rooms (bedroom, kitchen, living room, etc.)
+dataset = 'brain_mri'  # MRI images of brain tumors
 
 # NN = 'CNN'  # convolutional neural network (~85.9%)
-NN = 'RNN'  # residual neural network (ResNet) (~99.4%)
+# NN = 'RNN'  # residual neural network (ResNet) (~99.4%)
 # NN = 'VIT'  # vision transformer (~98.4%)
+NN = 'VGG'  # visual geometry group 16 layers
 
 MODEL_PATH = f'E:/models/{dataset}_{NN}.pth'
 
@@ -65,6 +69,11 @@ elif NN == 'VIT':
     for param in model.parameters():
         param.requires_grad = False  # freeze pre-trained weights, so they don't get changed during training
     model.heads = nn.Linear(in_features=768, out_features=len(classes))
+elif NN == 'VGG':
+    model = models.vgg16(weights=models.VGG16_Weights.DEFAULT)
+    for param in model.parameters():
+        param.requires_grad = False  # freeze pre-trained weights, so they don't get changed during training
+    model.classifier[6] = nn.Linear(in_features=model.classifier[6].in_features, out_features=len(classes))
 else:  # CNN
     hidden_units = 10  # works best
     model = nn.Sequential(
@@ -98,17 +107,17 @@ def fit_model(dataloader: torch.utils.data.DataLoader, train: bool = False):
     for x, y in tqdm(dataloader, desc=f'Training   {NN}' if train else f'Validation {NN}'):
         x, y = x.to(device), y.to(device)
         if train:
-            y_logits = model(x)
-            batch_loss = loss_fn(y_logits, y)  # calculate loss
+            output = model(x)
+            batch_loss = loss_fn(output, y)  # calculate loss
             optimizer.zero_grad()  # zero the optimizer
             batch_loss.backward()  # backpropagation
             optimizer.step()  # optimize model parameters
         else:
             with torch.inference_mode():
-                y_logits = model(x)
-            batch_loss = loss_fn(y_logits, y)  # calculate loss
+                output = model(x)
+            batch_loss = loss_fn(output, y)  # calculate loss
 
-        y_predict = torch.softmax(y_logits, dim=1).argmax(dim=1)
+        y_predict = torch.softmax(output, dim=1).argmax(dim=1)
         loss += batch_loss.item() if train else batch_loss  # accumulate loss
         acc += acc_fn(y, y_predict)  # accumulate accuracy
 
@@ -149,3 +158,7 @@ except (FileNotFoundError, RuntimeError):
 
 # Predict unseen images from TEST_DIR
 show_image_predictions(model, image_path=TEST_DIR, size=SIZE, classes=classes, device=device)
+
+# Explainable AI: Layer-wise relevance propagation for brain tumor MRI images
+if dataset == 'brain_mri':
+    layer_wise_relevance_propagation(model, dataloader=validation_dataloader, device=device, classes=classes)
